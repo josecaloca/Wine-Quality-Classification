@@ -1,0 +1,572 @@
+---
+title: "Wine Classification Capstone Project"
+author: "José Caloca"
+date: "15/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# Introduction
+
+The purpose of this project is to determine the Class (quality) of wine from 13 attributes. The data that is examined in this project is provided by UCI Machine Learning Repository. Each wine was grown in the same region in Italy although they were processed by three different cultivars. The cultivars are represented by three Classes: 1, 2, or 3. The columns of this dataset are as follows:
+
+  + **Class**: This is what we are attempting to predict. Factor
+  + **Alcohol**: Numeric
+  + **Malic Acid**: Numeric
+  + **Ash**: Numeric
+  + **Alcalinity** of Ash: Numeric
+  + **Magnesium**: Integer
+  + **Total Phenols**: Numeric
+  + **Flavanoids**: Numeric
+  + **Nonflavanoids Phenols**: Numeric
+  + **Proanthocyanins**: Numeric
+  + **Color Intensity**: Numeric
+  + **Hue**: Numeric
+  + **Proteine Concentration**: Numeric
+  + **Proline**: Numeric
+
+# Exploring the Data Set
+
+We load the following libraries:
+
++ **Tidyverse**: The tidyverse is an opinionated collection of R packages designed for data science. All packages share an underlying design philosophy, grammar, and data structures.
+
++ **Caret**: The caret package (short for Classification And REgression Training) contains functions to streamline the model training process for complex regression and classification problems. The package utilizes a number of R packages but tries not to load them all at package start-up (by removing formal package dependencies, the package startup time can be greatly decreased). The package “suggests” field includes 30 packages. caret loads packages as needed and assumes that they are installed. If a modeling package is missing, there is a prompt to install it.
+
++ **Datatable**: is a package is used for creating graphics with details from statistical tests included in the information-rich plots themselves.
+
++ **Ggstatsplot**: This package is already contained in the Tidyverse package but it provides very usefull tools for data visualisation.
+
++ **Rpart.plot**: Used for plotting rpart decision trees models.
+
+```{r echo = FALSE}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+if(!require(ggstatsplot)) remotes::install_github(
+  repo = "IndrajeetPatil/ggstatsplot", # package path on GitHub
+  dependencies = TRUE, # installs packages which ggstatsplot depends on
+  upgrade_dependencies = TRUE # updates any out of date dependencies
+)
+```
+
+First, we look at some main summary statistics of our dataset and get a picture of the distribution of each variables.
+
+```{r echo = FALSE}
+#reading in the data. clean the data set to make it ready for analysis
+
+
+dl <- tempfile()
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data",dl)
+wine_data <- fread(dl)
+
+#adding column names. These were gathered from the wine.names file at 
+#"https://archive.ics.uci.edu/ml/machine-learning-databases/wine/"
+column_names <- c('Class',
+                  'Alcohol',
+                  'Malic_Acid',
+                  'Ash',
+                  'Alcalinity_of_Ash',
+                  'Magnesium',
+                  'Total_Phenols',
+                  'Flavanoids',
+                  'Nonflavanoids_Phenols',
+                  'Proanthocyanins',
+                  'Color_Intensity',
+                  'Hue',
+                  'Proteine_Concentration',
+                  'Proline')
+
+
+colnames(wine_data) <- column_names
+wine_data$Class <- as.factor(wine_data$Class)
+
+
+knitr::kable(do.call(cbind, lapply(select(wine_data, 1:5), summary)))
+knitr::kable(do.call(cbind, lapply(select(wine_data, 6:10), summary)))
+knitr::kable(do.call(cbind, lapply(select(wine_data, 11:14), summary)))
+```
+
+We want to get an idea of the percentage of wines that are Class 1,2, or 3.
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+C1 <- mean(wine_data$Class == 1)
+cat("The percentage of Class 1 is: " , C1)
+
+C2 <- mean(wine_data$Class == 2)
+cat("The percentage of Class 2 is: " , C2)
+
+C3 <- mean(wine_data$Class == 3)
+cat("The percentage of Class 3 is: " , C3)
+```
+
+In order to understand our dataset we are interested in visualizing the variables by class. To do this, we will make violin and box plots to analyze the distribution of each variable using the *ggstatsplot* package. By default we will obtain the following information in our graphs:
+
++ Raw data + distributions
++ Descriptive statistics
++ Statistic + p-value
++ Effect size + CIs
++ Pairwise comparisons
++ Bayesian hypothesis-testing
++ Bayesian estimation
+
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE}  
+#alcohol
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Alcohol,
+  title = "Distribution of Alcohol percentage across Classes"
+)
+```
+
+We can observe from comparing variable alcohol % by class that wines of class 1 generally contain the highest percentage of alcohol as the observations fall right most on the interval and are also most concentrated around 13.75 % alcohol. Class 2 wines lie in the middle of the alcohol % interval, concentrated between 12.75% and 13.5% as there are two peaks. Class 3 wines are the lowest in alcohol % as the observations lie on the left most side of the interval, these wines typically contain about 12.25% alcohol.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#Malic_acid
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Malic_Acid,
+  title = "Distribution of Malic Acid across Classes"
+  )
+```
+
+Malic acid contributes to the sour taste of fruits and is used as a food additive, the more malic acid the sourer the wine. All three classes of wine contain malic acid varying from .5 to 5.75 g/l on the interval. Conveniently, the density plot allows us to easily spot the largest concentrations for each of the classes. Class 1 wines have the greatest concentration at around 1.75 g/l malic acid, class 2 with 1.5 g/l and lastly class 3 are most likely to contain 3.25 g/l malic acid. Class 3 wines are typically more sour.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#ash
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Ash,
+  title = "Distribution of Ash across Classes"
+  )
+```
+
+Ash content is an important indicator in wine quality because of the link between minerals and trace elements. All three classes of wine are normally distributed around the center of the ash interval ranging from 1.25mg/l to 3.75 mg/l. Class 1 wines are most likely to contain 2.4mg/l of ash, 2.25mg/l for class 2 and 2.35 mg/l for class 3 according to the peaks on the density plot.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#alcalinity of ash
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Alcalinity_of_Ash,
+  title = "Distribution of Alcalinity of Ash across Classes"
+  )
+```
+
+The alcalinity of the ash is defined as the sum of cations, other than the ammonium ion, combined with the organic acids dissolved in water measured by ml/l. Observations for class 1 wines lie on the left side of the interval for alcalinity of ash, the majority of wines under this class have an alcalinity of 17. Class 2 wine observations span between 11 and 30, the entire interval, but the greatest concentration of wines under category 2 contain alcalinity of around 19. Lastly, class 3 wines contain the greatest amount of alcalinity on average with the largest concentration at around 21, the observations for class 3 wines lie between 15 and 29.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#magnesium
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Magnesium,
+  title = "Distribution of Magnesium across Classes"
+  )
+```
+
+Magnesium is an essential mineral in the human body that promotes energy metabolism and is weakly alkaline. All three classes contain magnesium contents that typically lie on the lower half of the interval between 70 and 162. In order of highest concentrations from least to greatest is class 2 with magnesium amounts around 85, followed by class 3 at 95 then lastly class 1 at 105. Class 1 wines contain the largest amount of magnesium amidst the three classes.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE}  
+
+#Total Phenols
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Total_Phenols,
+  title = "Distribution of Total Phenols across Classes"
+)
+```
+
+Total phenols account for molecules containing polyphenolic substances, which have a bitter taste and affect the taste, color and taste of the wine, and contribute to the nutritional value of the wine. Class 2 wines are distributed throughout the entire interval between 1 and 3.9. Class 3 wines are skewed towards the left on the interval, while class 1 are the opposite, mostly lying on the right side of the interval. The highest concentrations pertaining to each class is as follows: class 1 is around 2.9, class 2 is around 2.1 while class 3 is around 1.5. Class 1 wines typically have the greatest number of total phenols.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#Flavanoids
+
+ggstatsplot::ggbetweenstats(
+    data = wine_data,
+    x = Class,
+    y = Flavanoids,
+    title = "Distribution of Flavanoids across Classes"
+)
+```
+
+Flavanoids are antioxidants promote anti-aging and are beneficial for the heart, they are rich in aroma and bitter. Class 3 wine observations lie entirely on the far-left side of the interval, the highest concentration is situated amongst a rating of .6 flavanoids. Wines categorized under class 2 contain between 0 to 5, the entire length of the interval but the highest concentration is observed at around 2. Class 1 observations are normally distributed towards the middle of the interval, the peak is situated at 2.9. Class 1 wines are most likely to have the greatest amount of flavanoids.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#non-flavanoids phenols
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Nonflavanoids_Phenols,
+  title = "Distribution of Non-flavanoids Phenols across Classes"
+  )
+```
+
+Nonflavanoid phenols is an aromatic gas with oxidation resistance and is weakly acidic. Class 1 wines are largely distributed towards the left side of the interval while both class 2 and 3 wines are spread across the entire interval. The largest concentration of class 1 wines lies at a measurement of about .28 nonflavanoid phenols. The concentration for class 2 wines is a plateau that spans between .28 to .40 while class 3 wines are most concentrated around a rating of .5. It is evident that class 3 wines are most likely to contain the greatest amount of Nonflavanoid phenols.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#Proanthocyanins
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Proanthocyanins,
+  title = "Distribution of Proanthocyanins across Classes"
+  )
+```
+
+Proanthocyanins are a bioflavonoid compound which is a natural antioxidant with a slightly bitter aroma. All three classes are almost entirely distributed throughout the interval. Class 3 wines typically have the smallest amount of Proanthocyanins while class 1 wines contain the largest amount on average when observing their distribution peaks.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#Color Intensity
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Color_Intensity,
+  title = "Distribution of Color Intensity across Classes"
+  )
+```
+
+Color intensity measures the degree of color shade, lower numbers correspond to a lighter intensity of wine while higher numbers represent thicker shades. The longer the wine and grape juice are involved during the wine making process, the thicker the taste. Class 3 wines are normally distributed throughout the interval of color intensity from 0 to 13, there are two peaks situated between ratings 5 and 8, half of the wines from this class have the greatest color intensity of the three classes. Observations for class 2 wines are almost entirely concentrated around a 2 rating. Class 3 wines are greatly concentrated around a 6 rating, the wines under this class fall between 2 and 10.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#Hue
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Hue,
+  title = "Distribution of Hue across Classes"
+  )
+```
+
+Hue variable measures color vividness and degree or warmth and coldness, hue is used to measure the age and variety of the wine. Red wines that are aged longer have a yellow hue and increased transparency. Class 3 wines have the lowest amount of hue as many of the observations are skewed to the left, the majority lie at about .60 hue. Observations for class 2 wines are distributed all across the interval, the tallest peak of class 2 wines is observed at .90 hue. Class 1 wines are distributed in the middle of the interval, most class 1 wines contain a rating of about 1.10 hue.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#OD280/OD315_of_diluted wines
+
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Proteine_Concentration,
+  title = "Distribution of Proteine Concentration across Classes"
+  )
+```
+
+OD280/OD315 is the method for determining the protein content of wine. Class 3 wines contain the smallest amount of protein content, the highest concentration of class 3 wines have a reading of about 1.6. Class 2 wines have protein contents varying drastically between 1.25 to 4, but the majority have protein contents of about 3.25. Class 1 wines have the greatest amount of protein content, there are two large concentrations, the higher peak is located at about 2.8 while the smaller peak lies at 3.4.
+
+```{r echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE} 
+#proline
+ggstatsplot::ggbetweenstats(
+  data = wine_data,
+  x = Class,
+  y = Proline,
+  title = "Distribution of Proline across Classes"
+)
+```
+
+Proline is the main amino acid in red wine and imperative to the flavor and nutrition of wine. Class 1 wines have the highest amount of proline as the majority of observations lie on the right side of the interval, their density peak lies at around the 1100 measure. Both class 2 and class 3 wines are situated on the left side of the interval. The greatest concentration of class 2 wines lies around 475 proline, while for class 3 wines, it is about 625 when we observe each peak.
+
+The rest of the variables have similar distributions by class. There is nothing that strikes out as different.
+
+# Methods/Analysis
+
+To create a predictive model, we create three simple (and naive) models followed by two machine learning models. For the machine learning algorithms we will create our *train_set* that contains 75% of the observations, and *test_set* contains the remaining 25%.
+
+```{r warning = FALSE, message = FALSE}
+#the names for the columns I specified were bad
+colnames(wine_data) <- make.names(colnames(wine_data)) 
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(wine_data$Class, times = 1, p = 0.25, list = FALSE)
+
+train_set <- wine_data[-test_index]
+test_set <- wine_data[test_index,]
+```
+
+## If/Else Models
+
+### Alcohol Vs Ash
+
+First, let's plot Alcohol vs Ash. Ash's distribution by class showed very little differences. This initial model is meant to be simple.
+
+```{r}
+train_set %>%
+  ggplot(aes(x = Alcohol, y = Ash, col = Class)) + 
+  geom_point(size = 4)
+```
+
+There appears to be groups in the data. The groups are not exclusive, which implies that the If/Else model cannot be 100% accurate. 
+
+The first model is built as follows:
+Wines with alcohol less than or equal to 12.75 are classified as "Class 2". Otherwise, Wines with Alcohol less than or equal to 13.75 are classified as "Class 3". Otherwise, the wine is classified as "Class 1". These cut-off values are visually inspected.
+
+```{r}
+alcohol_model <- function(val){
+    if(val <= 12.75){
+        2
+    } else if(val <= 13.75){
+        3
+    } else 1
+}
+
+y_hat_alc <- sapply(test_set$Alcohol, alcohol_model)
+y_hat_alc <- as.factor(y_hat_alc)
+method1 <- mean(y_hat_alc == test_set$Class)*100
+method1
+
+```
+
+```{r echo = FALSE}
+Methods <- c("Just Alcohol")
+Accuracy <- c(method1)
+results_so_far <- data.frame(Methods, Accuracy)
+knitr::kable(results_so_far, align = "lccrr")
+```
+
+With this simple model, we get an accuracy of about `r method1``%.
+
+### Alcohol Vs Total Phenols
+
+For the next model, we consider Alcohol and Total Phenols. We can plot the relationship and identify clusters.
+
+```{r}
+train_set %>%
+  ggplot(aes(x = Alcohol, y = Total_Phenols, col = Class)) + 
+  geom_point(size = 4)
+```
+
+We can identify some clusters in the graph. The groups are a bit more different compared to the Alcohol vs Ash analysis so we will consider Total Phenols when constructing the If/Else model.
+
+The next model is built as follows:
+Wines with alcohol less than or equal to 12.75 are classified as "Class 2". Otherwise, Wines with Total Phenols greater than or equal to 2.5 are classified as "Class 1". Otherwise, the Wine is classified as "Class 3". These cut-off values are visually inspected.
+
+```{r}
+alc_phen <- function(alc, phen){
+  if (alc <= 12.75){
+    2
+  } else if(phen >= 2.5){
+    1
+  } else 3
+}
+
+y_hat_alc_phen <- mapply(alc_phen, test_set$Alcohol, test_set$Total_Phenols)
+y_hat_alc_phen <- as.factor(y_hat_alc_phen)
+method2 <- mean(y_hat_alc_phen == test_set$Class)*100
+method2
+```
+
+```{r echo = FALSE}
+Methods <- c("Just Alcohol", "Alcohol and Total Phenols")
+Accuracy <- c(method1,method2)
+results_so_far <- data.frame(Methods, Accuracy)
+knitr::kable(results_so_far, align = "lccrr")
+```
+
+With this improved model, our accuracy increases to `r method2`%.
+
+### Alcohol Vs Flavanoids
+
+For the final If/Else model, we consider Alcohol and Flavanoids. We plot the relationship as follows:
+
+```{r}
+train_set %>%
+  ggplot(aes(x = Alcohol, y = Flavanoids, col = Class)) + 
+  geom_point(size = 4)
+```
+
+In the above graph we can appreciate some clusters. For this If/Else model, we consider both Alcohol and Flavanoids.
+
+The model is built as follows:
+Wines with flavanoids greater than 2.5 are classified as "Class 1". Otherwise, Wines with alcohol less than or equal to 12.5 are classified as "Class 2". Otherwise, the wine is labeled as "Class 3".
+
+```{r}
+alc_flav <- function(alc, flav){
+  if(flav > 2.5){
+    1
+  } else if(alc <= 12.5){
+    2
+  } else
+    3
+}
+
+y_hat_alc_flav <- mapply(alc_flav, test_set$Alcohol, test_set$Flavanoids)
+y_hat_alc_flav <- as.factor(y_hat_alc_flav)
+method3 <- mean(y_hat_alc_flav == test_set$Class)*100
+method3
+```
+
+```{r echo = FALSE}
+Methods <- c("Just Alcohol", "Alcohol and Total Phenols", "Alcohol and Flavanoids")
+Accuracy <- c(method1,method2, method3)
+results_so_far <- data.frame(Methods, Accuracy)
+knitr::kable(results_so_far, align = "lccrr")
+```
+
+This method gave an accuracy of `r method3`%, similar to the first model.
+
+## Machine Learning Models
+
+### Decision Tree
+
+The first machine learning model is a **Decision Tree**. 
+
+A decision tree is a machine learning algorithm that partitions the data into subsets. The partitioning process starts with a binary split and continues until no further splits can be made. Various branches of variable length are formed.
+
+The goal of a decision tree is to encapsulate the training data in the smallest possible tree. The rationale for minimizing the tree size is the logical rule that the simplest possible explanation for a set of phenomena is preferred over other explanations. Also, small trees produce decisions faster than large trees, and they are much easier to look at and understand. There are various methods and techniques to control the depth, or prune, of the tree.
+
+**Main ideas of a decision tree:**
++ Decision trees are popular among non-statisticians as they produce a model that is very easy to interpret. Each leaf node is presented as an if/then rule. Cases that satisfy the if/then statement are placed in the node.
++ Are non-parametric and therefore do not require normality assumptions of the data. Parametric models specify the form of the relationship between predictors and a response. An example is a linear relationship for regression. In many cases, however, the nature of the relationship is unknown. This is a case in which non-parametric models are useful.
++ Can handle data of different types, including continuous, categorical, ordinal, and binary. Transformations of the data are not required.
++ Can be useful for detecting important variables, interactions, and identifying outliers.
++ Handle missing data by identifying surrogate splits in the modeling process. Surrogate splits are splits highly associated with the primary split. In other models, records with missing values are omitted by default.
+
+
+The model is constructed using the **train()** function that is part of the *caret* package. The train function uses Cross-Validation to find the optimal Complexity Parameter. The complexity parameter is the minimum improvement in the model needed at each node. The Complexity Parameter value is a stopping parameter. It helps speed up the search for splits because it can identify splits that doesn’t meet this criteria and prune them before going too far.
+
+```{r warning = FALSE, message= FALSE}
+set.seed(3, sample.kind = "Rounding") #so that we get consistent results everytime.
+train_rpart <- train(Class ~ ., 
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0,0.1,0.01)),
+                     data = train_set)
+
+ggplot(train_rpart, highlight = TRUE) 
+
+y_hat_rpart <- predict(train_rpart, test_set) #we make a prediction
+
+method4 <- mean(y_hat_rpart == test_set$Class)*100
+method4
+```
+
+By using this method, we obtain an accuracy of `r method4`%. these results are validated in the following confusion matrix by checking the sensitivity and specificity:
+
+```{r echo = FALSE}
+confusionMatrix(y_hat_rpart, test_set$Class)
+```
+
+A decision tree will be rendered based on the results from the trained model and the trained data based on the corresponding class. The following plot shows that Flavanoids, Color Intensity, and Proline were the most important variables for this model.
+
+```{r echo = FALSE}
+rpart.plot(train_rpart$finalModel, type = 5)
+```
+
+Now we can compare the accuracy of this model with the previous ones in the following table
+
+```{r echo = FALSE}
+Methods <- c("Just Alcohol", "Alcohol and Total Phenols", "Alcohol and Flavanoids", "Decision Tree")
+Accuracy <- c(method1,method2, method3, method4)
+results_so_far <- data.frame(Methods, Accuracy)
+knitr::kable(results_so_far, align = "lccrr")
+```
+
+### Random Forest
+
+Random forest (RF) modeling has emerged as an important statistical learning method due to its exceptional predictive performance. Random Forest use a technique called feature bagging, which has the advantage of significantly decreasing the correlation between each DT and thus increasing its predictive accuracy, on average. Feature bagging works by randomly selecting a subset of the feature dimensions at each split in the growth of individual decision trees. This may sound counterintuitive, after all it is often desired to include as many features as possible initially in order to gain as much information for the model. However it has the purpose of deliberately avoiding (on average) very strong predictive features that lead to similar splits in trees (and thus increase correlation).
+
+That is, if a particular feature is strong in predicting the response value then it will be selected for many trees. Hence a standard bagging procedure can be quite correlated. Random forests avoid this by deliberately leaving out these strong features in many of the grown trees. If all values are chosen in splitting of the trees in a random forest ensemble then this simply corresponds to standard bagging.
+
+First we try to look for the best parameter that fits for our model. First we use modelLookup to see what parameter is needed and we find out that "mtry" seems to be the best parameter.
+
+```{r warning = FALSE, message= FALSE}
+modelLookup("rf") 
+```
+
+The next model is an extension of a Decision Tree. We implement the Random Forest model through the caret’s train() function. The train function uses Cross-Validation to find the optimal mtry Parameter. first we will use modelLookup to see what parameter is needed
+
+```{r warning = FALSE, message= FALSE}
+train_rf <- train(Class ~ .,
+                  data = train_set,
+                  model = "rf",
+                  tuneGrid = data.frame(mtry = seq(0,10,0.5)))
+
+ggplot(train_rf, highlight = TRUE)
+
+y_hat_rf <- predict(train_rf, test_set) 
+method5 <- mean(y_hat_rf == test_set$Class)*100
+method5
+```
+
+This model has drastically improved the accuracy of the model to `r method5`%! And the information is confirmed by the following confusion matrix.
+
+```{r warning = FALSE, message= FALSE}
+confusionMatrix(y_hat_rf, test_set$Class)
+```
+
+
+```{r echo = FALSE}
+Methods <- c("Just Alcohol", "Alcohol and Total Phenols", "Alcohol and Flavanoids", "Decision Tree", "Random Forest")
+Accuracy <- c(method1,method2, method3, method4, method5)
+results_so_far <- data.frame(Methods, Accuracy)
+knitr::kable(results_so_far, align = "lccrr")
+```
+
+From this model, our accuracy jumps to 100%! We can observe the variable importance as follows.
+
+```{r echo = FALSE}
+knitr::kable(train_rf$finalModel$importance)
+```
+
+Here we can see the Flavanoids, Color Intensity, and Alcohol had the highest variable importance.
+
+# Results
+
+Below is a table summarizing the accuracies of each method by using the train and test sets.
+```{r echo = FALSE}
+knitr::kable(results_so_far %>% arrange(Accuracy, Methods), align = "lccrr")
+```
+
+We would like to test the Random Forest model with the entire dataset as follows.
+
+```{r warning = FALSE, message= FALSE}
+final_preds <- predict(train_rf, wine_data)
+final_method <- mean(final_preds == wine_data$Class)*100
+cat("The accuracy of Random Forest on the entire dataset is: ",final_method,"%")
+```
+
+
+# Conclusion
+
+By applying a Random Forest algorithm, it is possible to provide very robust and reliable results. The results of this project can be extended to classify unknown wine's by their chemical compounds. In order to do that, this data set must be much more detailed. All of the wines that were explored in this project were from the same region in Italy; it is possible that wines from a different country could have similar chemical compounds as these wines which would require a more sophisticated predictive model.
+
+# References
+
+Aeberhard, Stefan. et al (2020). UCI Machine Learning Repository [https://archive.ics.uci.edu/ml/datasets/
+wine]. Irvine, CA: University of California, School of Information and Computer Science.
+17
+
+David Meyer, Evgenia Dimitriadou, Kurt Hornik, Andreas Weingessel and
+  Friedrich Leisch (2020). e1071: Misc Functions of the Department of
+  Statistics, Probability Theory Group (Formerly: E1071), TU Wien. R package
+  version 1.7-4. https://CRAN.R-project.org/package=e1071
+  
+H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New
+  York, 2016.
+  
+Max Kuhn (2020). caret: Classification and Regression Training. R package
+  version 6.0-86. https://CRAN.R-project.org/package=caret
+  
+Matt Dowle and Arun Srinivasan (2020). data.table: Extension of `data.frame`.
+  R package version 1.13.2. https://CRAN.R-project.org/package=data.table
+  
+Stephen Milborrow (2020). rpart.plot: Plot 'rpart' Models: An Enhanced Version
+  of 'plot.rpart'. R package version 3.0.9.
+  https://CRAN.R-project.org/package=rpart.plot
+  
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source
+  Software, 4(43), 1686, https://doi.org/10.21105/joss.01686
